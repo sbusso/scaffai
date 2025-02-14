@@ -207,6 +207,19 @@ ruff check .
 mypy .
 ```
 
+4. Build and publish:
+
+```bash
+# Build the package
+uv build --no-sources
+
+# Upload to TestPyPI first
+uv publish --index testpypi --token $TEST_PYPI_TOKEN
+
+# Upload to PyPI
+uv publish --token $PYPI_TOKEN
+```
+
 ## Contributing
 
 1. Fork the repository

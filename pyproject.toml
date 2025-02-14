@@ -1,9 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "scaffai"
 version = "0.1.0"
 description = "AI-powered project scaffolding tool with Human-in-the-Loop capabilities"
-authors = []
+authors = [{ name = "Stephane Busso", email = "stephane.busso@gmail.com" }]
+license = { text = "MIT" }
+readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["ai", "scaffolding", "project-templates", "cli", "langchain"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Code Generators",
+]
 dependencies = [
     "typer>=0.9.0",
     "rich>=13.7.0",
@@ -19,9 +36,16 @@ dev = ["ruff>=0.3.4", "mypy>=1.9.0", "black>=24.3.0", "pytest>=8.1.1"]
 [project.scripts]
 scaffai = "scaffai.cli:main"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[project.urls]
+Homepage = "https://github.com/sbusso/scaffai"
+Repository = "https://github.com/sbusso/scaffai.git"
+Documentation = "https://github.com/sbusso/scaffai#readme"
+"Bug Tracker" = "https://github.com/sbusso/scaffai/issues"
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
 
 [tool.ruff]
 line-length = 88
