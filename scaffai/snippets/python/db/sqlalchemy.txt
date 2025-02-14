@@ -1,0 +1,319 @@
+Name: SQLAlchemy with PostgreSQL
+Description: SQLAlchemy integration with async support and repository pattern
+Dependencies: sqlalchemy[asyncpg] alembic
+
+Files:
+------
+src/${project_name}/db/models.py:
+  from datetime import datetime
+  from typing import Optional
+  from sqlalchemy import String, DateTime
+  from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+  
+  class Base(DeclarativeBase):
+      pass
+  
+  class User(Base):
+      __tablename__ = "users"
+      
+      id: Mapped[str] = mapped_column(String, primary_key=True)
+      email: Mapped[str] = mapped_column(String, unique=True)
+      name: Mapped[str]
+      password: Mapped[str]
+      created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+      updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+src/${project_name}/db/database.py:
+  from typing import AsyncGenerator
+  from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+  from sqlalchemy.orm import sessionmaker
+  
+  from ${project_name}.core.config import get_settings
+  
+  settings = get_settings()
+  
+  engine = create_async_engine(
+      settings.DATABASE_URL,
+      echo=settings.DEBUG,
+      pool_size=5,
+      max_overflow=10,
+  )
+  
+  AsyncSessionLocal = sessionmaker(
+      engine,
+      class_=AsyncSession,
+      expire_on_commit=False,
+  )
+  
+  async def get_session() -> AsyncGenerator[AsyncSession, None]:
+      async with AsyncSessionLocal() as session:
+          yield session
+
+src/${project_name}/db/repository.py:
+  from datetime import datetime
+  from typing import Optional, TypeVar, Generic, Type
+  from uuid import uuid4
+  from sqlalchemy import select
+  from sqlalchemy.ext.asyncio import AsyncSession
+  from ${project_name}.db.models import Base
+  
+  ModelType = TypeVar("ModelType", bound=Base)
+  
+  class Repository(Generic[ModelType]):
+      def __init__(self, model: Type[ModelType], session: AsyncSession):
+          self.model = model
+          self.session = session
+      
+      async def create(self, **kwargs) -> ModelType:
+          now = datetime.now()
+          instance = self.model(
+              id=str(uuid4()),
+              created_at=now,
+              updated_at=now,
+              **kwargs
+          )
+          self.session.add(instance)
+          await self.session.commit()
+          return instance
+      
+      async def get_by_id(self, id: str) -> Optional[ModelType]:
+          stmt = select(self.model).where(self.model.id == id)
+          result = await self.session.execute(stmt)
+          return result.scalar_one_or_none()
+      
+      async def update(self, instance: ModelType, **kwargs) -> ModelType:
+          for key, value in kwargs.items():
+              setattr(instance, key, value)
+          instance.updated_at = datetime.now()
+          await self.session.commit()
+          return instance
+      
+      async def delete(self, instance: ModelType) -> None:
+          await self.session.delete(instance)
+          await self.session.commit()
+
+src/${project_name}/db/repositories/users.py:
+  from typing import Optional
+  from sqlalchemy import select
+  from sqlalchemy.ext.asyncio import AsyncSession
+  from ${project_name}.db.models import User
+  from ${project_name}.db.repository import Repository
+  
+  class UserRepository(Repository[User]):
+      def __init__(self, session: AsyncSession):
+          super().__init__(User, session)
+      
+      async def get_by_email(self, email: str) -> Optional[User]:
+          stmt = select(User).where(User.email == email)
+          result = await self.session.execute(stmt)
+          return result.scalar_one_or_none()
+
+Migrations:
+----------
+alembic.ini:
+  [alembic]
+  script_location = migrations
+  sqlalchemy.url = driver://user:pass@localhost/dbname
+  
+  [loggers]
+  keys = root,sqlalchemy,alembic
+  
+  [handlers]
+  keys = console
+  
+  [formatters]
+  keys = generic
+  
+  [logger_root]
+  level = WARN
+  handlers = console
+  qualname =
+  
+  [logger_sqlalchemy]
+  level = WARN
+  handlers =
+  qualname = sqlalchemy.engine
+  
+  [logger_alembic]
+  level = INFO
+  handlers =
+  qualname = alembic
+  
+  [handler_console]
+  class = StreamHandler
+  args = (sys.stderr,)
+  level = NOTSET
+  formatter = generic
+  
+  [formatter_generic]
+  format = %(levelname)-5.5s [%(name)s] %(message)s
+  datefmt = %H:%M:%S
+
+migrations/env.py:
+  import asyncio
+  from logging.config import fileConfig
+  
+  from sqlalchemy import pool
+  from sqlalchemy.engine import Connection
+  from sqlalchemy.ext.asyncio import async_engine_from_config
+  
+  from alembic import context
+  
+  from ${project_name}.core.config import get_settings
+  from ${project_name}.db.models import Base
+  
+  config = context.config
+  
+  if config.config_file_name is not None:
+      fileConfig(config.config_file_name)
+  
+  target_metadata = Base.metadata
+  settings = get_settings()
+  
+  def run_migrations_offline() -> None:
+      url = settings.DATABASE_URL
+      context.configure(
+          url=url,
+          target_metadata=target_metadata,
+          literal_binds=True,
+          dialect_opts={"paramstyle": "named"},
+      )
+  
+      with context.begin_transaction():
+          context.run_migrations()
+  
+  def do_run_migrations(connection: Connection) -> None:
+      context.configure(connection=connection, target_metadata=target_metadata)
+  
+      with context.begin_transaction():
+          context.run_migrations()
+  
+  async def run_async_migrations() -> None:
+      configuration = config.get_section(config.config_ini_section)
+      configuration["sqlalchemy.url"] = settings.DATABASE_URL
+  
+      connectable = async_engine_from_config(
+          configuration,
+          prefix="sqlalchemy.",
+          poolclass=pool.NullPool,
+      )
+  
+      async with connectable.connect() as connection:
+          await connection.run_sync(do_run_migrations)
+  
+      await connectable.dispose()
+  
+  def run_migrations_online() -> None:
+      asyncio.run(run_async_migrations())
+  
+  if context.is_offline_mode():
+      run_migrations_offline()
+  else:
+      run_migrations_online()
+
+migrations/script.py.mako:
+  """${message}
+  
+  Revision ID: ${up_revision}
+  Revises: ${down_revision | comma,n}
+  Create Date: ${create_date}
+  
+  """
+  from typing import Sequence, Union
+  
+  from alembic import op
+  import sqlalchemy as sa
+  ${imports if imports else ""}
+  
+  # revision identifiers, used by Alembic.
+  revision: str = ${repr(up_revision)}
+  down_revision: Union[str, None] = ${repr(down_revision)}
+  branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}
+  depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
+  
+  
+  def upgrade() -> None:
+      ${upgrades if upgrades else "pass"}
+  
+  
+  def downgrade() -> None:
+      ${downgrades if downgrades else "pass"}
+
+migrations/versions/001_create_users.py:
+  """create users table
+  
+  Revision ID: 001
+  Revises: 
+  Create Date: 2024-02-20
+  """
+  from typing import Sequence, Union
+  
+  from alembic import op
+  import sqlalchemy as sa
+  
+  
+  revision: str = '001'
+  down_revision: Union[str, None] = None
+  branch_labels: Union[str, Sequence[str], None] = None
+  depends_on: Union[str, Sequence[str], None] = None
+  
+  
+  def upgrade() -> None:
+      op.create_table(
+          'users',
+          sa.Column('id', sa.String(), nullable=False),
+          sa.Column('email', sa.String(), nullable=False),
+          sa.Column('name', sa.String(), nullable=False),
+          sa.Column('password', sa.String(), nullable=False),
+          sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+          sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+          sa.PrimaryKeyConstraint('id'),
+          sa.UniqueConstraint('email')
+      )
+      op.create_index('users_email_idx', 'users', ['email'])
+  
+  
+  def downgrade() -> None:
+      op.drop_index('users_email_idx')
+      op.drop_table('users')
+
+Environment Variables:
+--------------------
+Add to .env:
+  DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/dbname
+
+Config Updates:
+-------------
+Add to src/${project_name}/core/config.py:
+  DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/dbname"
+
+Usage Example:
+------------
+Add to src/${project_name}/api/dependencies.py:
+  from typing import AsyncGenerator
+  from fastapi import Depends
+  from sqlalchemy.ext.asyncio import AsyncSession
+  from ${project_name}.db.database import get_session
+  from ${project_name}.db.repositories.users import UserRepository
+  
+  async def get_user_repository(
+      session: AsyncSession = Depends(get_session)
+  ) -> AsyncGenerator[UserRepository, None]:
+      yield UserRepository(session)
+
+Add to src/${project_name}/api/routes/users.py:
+  from fastapi import APIRouter, Depends, HTTPException
+  from ${project_name}.db.repositories.users import UserRepository
+  from ${project_name}.api.dependencies import get_user_repository
+  
+  router = APIRouter()
+  
+  @router.get("/users/{user_id}")
+  async def get_user(
+      user_id: str,
+      users: UserRepository = Depends(get_user_repository)
+  ):
+      user = await users.get_by_id(user_id)
+      if not user:
+          raise HTTPException(status_code=404, detail="User not found")
+      return user 

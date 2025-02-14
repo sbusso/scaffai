@@ -1,0 +1,307 @@
+Project Template: Modern TypeScript Application
+Description: TypeScript project with Bun, React, and modern tooling
+Version: 1.0.0
+
+Dependencies:
+------------
+Core:
+- react
+- react-dom
+- @phosphor-icons/react
+- @tanstack/react-query
+- zustand
+- zod
+
+Optional:
+  UI:
+  - tailwindcss
+  - @headlessui/react
+  - @radix-ui/react-primitives
+  
+  Testing:
+  - @testing-library/react
+  - vitest
+  - @testing-library/jest-dom
+  
+  Development:
+  - typescript
+  - prettier
+  - eslint
+
+Directory Structure:
+-------------------
+src/
+  components/
+    layout/
+      Header.tsx:
+        import { House } from "@phosphor-icons/react";
+        
+        export const Header = () => {
+          return (
+            <header className="bg-white shadow">
+              <nav className="container mx-auto px-4 py-3">
+                <House size={24} />
+              </nav>
+            </header>
+          );
+        };
+
+    ui/
+      Button.tsx:
+        type ButtonProps = {
+          children: React.ReactNode;
+          onClick?: () => void;
+          variant?: "primary" | "secondary";
+        };
+        
+        export const Button = ({ children, onClick, variant = "primary" }: ButtonProps) => {
+          return (
+            <button
+              onClick={onClick}
+              className={`px-4 py-2 rounded-md ${
+                variant === "primary"
+                  ? "bg-blue-500 text-white hover:bg-blue-600"
+                  : "bg-gray-200 text-gray-800 hover:bg-gray-300"
+              }`}
+            >
+              {children}
+            </button>
+          );
+        };
+
+  hooks/
+    useStore.ts:
+      import { create } from "zustand";
+      
+      type Store = {
+        count: number;
+        increment: () => void;
+      };
+      
+      export const useStore = create<Store>((set) => ({
+        count: 0,
+        increment: () => set((state) => ({ count: state.count + 1 })),
+      }));
+
+  lib/
+    api.ts:
+      import { z } from "zod";
+      
+      const API_URL = process.env.API_URL || "http://localhost:3000/api";
+      
+      export const api = {
+        get: async <T>(path: string, schema: z.ZodType<T>) => {
+          const res = await fetch(`${API_URL}${path}`);
+          const data = await res.json();
+          return schema.parse(data);
+        },
+      };
+
+  pages/
+    index.tsx:
+      import { Button } from "../components/ui/Button";
+      import { useStore } from "../hooks/useStore";
+      
+      export default function Home() {
+        const { count, increment } = useStore();
+        
+        return (
+          <div className="container mx-auto px-4 py-8">
+            <h1 className="text-3xl font-bold">Welcome to ${project_name}</h1>
+            <p className="mt-4">{count} clicks</p>
+            <Button onClick={increment}>Increment</Button>
+          </div>
+        );
+      }
+
+  App.tsx:
+    import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+    import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+    import { Header } from "./components/layout/Header";
+    import Home from "./pages";
+    
+    const queryClient = new QueryClient();
+    
+    export function App() {
+      return (
+        <QueryClientProvider client={queryClient}>
+          <Router>
+            <div className="min-h-screen bg-gray-50">
+              <Header />
+              <Routes>
+                <Route path="/" element={<Home />} />
+              </Routes>
+            </div>
+          </Router>
+        </QueryClientProvider>
+      );
+    }
+
+  main.tsx:
+    import { StrictMode } from "react";
+    import { createRoot } from "react-dom/client";
+    import { App } from "./App";
+    import "./index.css";
+    
+    const root = createRoot(document.getElementById("root")!);
+    root.render(
+      <StrictMode>
+        <App />
+      </StrictMode>
+    );
+
+GitHub Workflow (test.yml):
+--------------------------
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+      - run: |
+          bun install
+          bun test
+          bun run lint
+          bun run typecheck
+
+Additional Files:
+---------------
+index.html:
+  <!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>${project_name}</title>
+    </head>
+    <body>
+      <div id="root"></div>
+      <script type="module" src="/src/main.tsx"></script>
+    </body>
+  </html>
+
+README.md:
+  # ${project_name}
+  
+  ${description}
+  
+  ## Setup
+  
+  ```bash
+  bun install
+  ```
+  
+  ## Development
+  
+  ```bash
+  # Start dev server
+  bun dev
+  
+  # Run tests
+  bun test
+  
+  # Run type check
+  bun run typecheck
+  
+  # Run linter
+  bun run lint
+  ```
+  
+  ## Build
+  
+  ```bash
+  bun run build
+  ```
+
+.gitignore:
+  # Dependencies
+  node_modules
+  
+  # Build
+  dist
+  
+  # Environment
+  .env
+  .env.local
+  
+  # IDE
+  .vscode
+  .idea
+  
+  # Logs
+  *.log
+  
+  # Testing
+  coverage
+  
+  # Misc
+  .DS_Store
+  *.pem
+
+.env:
+  API_URL=http://localhost:3000/api
+
+tsconfig.json:
+  {
+    "compilerOptions": {
+      "target": "ESNext",
+      "lib": ["DOM", "DOM.Iterable", "ESNext"],
+      "module": "ESNext",
+      "skipLibCheck": true,
+      "moduleResolution": "bundler",
+      "allowImportingTsExtensions": true,
+      "resolveJsonModule": true,
+      "isolatedModules": true,
+      "noEmit": true,
+      "jsx": "react-jsx",
+      "strict": true,
+      "noUnusedLocals": true,
+      "noUnusedParameters": true,
+      "noFallthroughCasesInSwitch": true
+    },
+    "include": ["src"],
+    "references": [{ "path": "./tsconfig.node.json" }]
+  }
+
+tsconfig.node.json:
+  {
+    "compilerOptions": {
+      "composite": true,
+      "skipLibCheck": true,
+      "module": "ESNext",
+      "moduleResolution": "bundler",
+      "allowSyntheticDefaultImports": true
+    },
+    "include": ["vite.config.ts"]
+  }
+
+.prettierrc:
+  {
+    "semi": true,
+    "singleQuote": false,
+    "tabWidth": 2,
+    "trailingComma": "es5"
+  }
+
+.eslintrc.json:
+  {
+    "root": true,
+    "env": { "browser": true, "es2020": true },
+    "extends": [
+      "eslint:recommended",
+      "plugin:@typescript-eslint/recommended",
+      "plugin:react-hooks/recommended",
+      "plugin:prettier/recommended"
+    ],
+    "ignorePatterns": ["dist", ".eslintrc.json"],
+    "parser": "@typescript-eslint/parser",
+    "plugins": ["react-refresh"],
+    "rules": {
+      "react-refresh/only-export-components": [
+        "warn",
+        { "allowConstantExport": true }
+      ]
+    }
+  } 

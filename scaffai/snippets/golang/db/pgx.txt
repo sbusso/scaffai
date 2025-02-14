@@ -1,0 +1,232 @@
+Name: PostgreSQL with pgx
+Description: PostgreSQL integration using pgx with connection pooling and repository pattern
+Dependencies: github.com/jackc/pgx/v5
+
+Files:
+------
+internal/db/db.go:
+  package db
+  
+  import (
+    "context"
+    "github.com/jackc/pgx/v5/pgxpool"
+  )
+  
+  type DB struct {
+    *pgxpool.Pool
+  }
+  
+  func Connect(ctx context.Context, url string) (*DB, error) {
+    config, err := pgxpool.ParseConfig(url)
+    if err != nil {
+      return nil, err
+    }
+    
+    // Set pool configuration
+    config.MaxConns = 10
+    config.MinConns = 2
+    
+    pool, err := pgxpool.NewWithConfig(ctx, config)
+    if err != nil {
+      return nil, err
+    }
+    
+    // Test connection
+    if err := pool.Ping(ctx); err != nil {
+      return nil, err
+    }
+    
+    return &DB{Pool: pool}, nil
+  }
+
+internal/db/models.go:
+  package db
+  
+  import "time"
+  
+  type Model struct {
+    ID        string    `json:"id"`
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+  }
+  
+  type User struct {
+    Model
+    Email    string `json:"email"`
+    Name     string `json:"name"`
+    Password string `json:"-"`
+  }
+
+internal/db/users.go:
+  package db
+  
+  import (
+    "context"
+    "errors"
+    "time"
+    
+    "github.com/jackc/pgx/v5"
+  )
+  
+  var (
+    ErrNotFound = errors.New("not found")
+    ErrConflict = errors.New("conflict")
+  )
+  
+  type UserRepository struct {
+    db *DB
+  }
+  
+  func NewUserRepository(db *DB) *UserRepository {
+    return &UserRepository{db: db}
+  }
+  
+  func (r *UserRepository) Create(ctx context.Context, user *User) error {
+    now := time.Now()
+    user.CreatedAt = now
+    user.UpdatedAt = now
+    
+    query := `
+      INSERT INTO users (id, email, name, password, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `
+    
+    _, err := r.db.Exec(ctx, query,
+      user.ID,
+      user.Email,
+      user.Name,
+      user.Password,
+      user.CreatedAt,
+      user.UpdatedAt,
+    )
+    
+    return err
+  }
+  
+  func (r *UserRepository) GetByID(ctx context.Context, id string) (*User, error) {
+    user := &User{}
+    
+    query := `
+      SELECT id, email, name, password, created_at, updated_at
+      FROM users
+      WHERE id = $1
+    `
+    
+    err := r.db.QueryRow(ctx, query, id).Scan(
+      &user.ID,
+      &user.Email,
+      &user.Name,
+      &user.Password,
+      &user.CreatedAt,
+      &user.UpdatedAt,
+    )
+    
+    if err == pgx.ErrNoRows {
+      return nil, ErrNotFound
+    }
+    
+    return user, err
+  }
+  
+  func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*User, error) {
+    user := &User{}
+    
+    query := `
+      SELECT id, email, name, password, created_at, updated_at
+      FROM users
+      WHERE email = $1
+    `
+    
+    err := r.db.QueryRow(ctx, query, email).Scan(
+      &user.ID,
+      &user.Email,
+      &user.Name,
+      &user.Password,
+      &user.CreatedAt,
+      &user.UpdatedAt,
+    )
+    
+    if err == pgx.ErrNoRows {
+      return nil, ErrNotFound
+    }
+    
+    return user, err
+  }
+  
+  func (r *UserRepository) Update(ctx context.Context, user *User) error {
+    user.UpdatedAt = time.Now()
+    
+    query := `
+      UPDATE users
+      SET email = $1, name = $2, password = $3, updated_at = $4
+      WHERE id = $5
+    `
+    
+    result, err := r.db.Exec(ctx, query,
+      user.Email,
+      user.Name,
+      user.Password,
+      user.UpdatedAt,
+      user.ID,
+    )
+    
+    if err != nil {
+      return err
+    }
+    
+    if result.RowsAffected() == 0 {
+      return ErrNotFound
+    }
+    
+    return nil
+  }
+  
+  func (r *UserRepository) Delete(ctx context.Context, id string) error {
+    query := `DELETE FROM users WHERE id = $1`
+    
+    result, err := r.db.Exec(ctx, query, id)
+    if err != nil {
+      return err
+    }
+    
+    if result.RowsAffected() == 0 {
+      return ErrNotFound
+    }
+    
+    return nil
+  }
+
+Migrations:
+----------
+migrations/001_create_users.sql:
+  CREATE TABLE IF NOT EXISTS users (
+    id         TEXT PRIMARY KEY,
+    email      TEXT UNIQUE NOT NULL,
+    name       TEXT NOT NULL,
+    password   TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+  );
+  
+  CREATE INDEX users_email_idx ON users (email);
+
+Environment Variables:
+--------------------
+Add to .env:
+  DATABASE_URL=postgres://postgres:postgres@localhost:5432/dbname?sslmode=disable
+
+Usage Example:
+------------
+Add to main.go:
+  // Initialize database
+  db, err := db.Connect(context.Background(), cfg.DatabaseURL)
+  if err != nil {
+    log.Fatal(err)
+  }
+  defer db.Close()
+  
+  // Create repositories
+  userRepo := db.NewUserRepository(db)
+  
+  // Use in handlers
+  user, err := userRepo.GetByEmail(ctx, "user@example.com") 

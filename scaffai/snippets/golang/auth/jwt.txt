@@ -1,0 +1,109 @@
+Name: JWT Authentication
+Description: JWT-based authentication with middleware and handlers
+Dependencies: github.com/golang-jwt/jwt/v5
+
+Files:
+------
+internal/auth/service.go:
+  package auth
+  
+  import (
+    "time"
+    "github.com/golang-jwt/jwt/v5"
+    "github.com/labstack/echo/v4"
+    "github.com/labstack/echo/v4/middleware"
+  )
+  
+  type Service struct {
+    secret []byte
+  }
+  
+  func NewService(secret string) *Service {
+    return &Service{secret: []byte(secret)}
+  }
+  
+  func (s *Service) Middleware() echo.MiddlewareFunc {
+    return middleware.JWTWithConfig(middleware.JWTConfig{
+      SigningKey: s.secret,
+      SigningMethod: "HS256",
+    })
+  }
+  
+  func (s *Service) GenerateToken(userID string) (string, error) {
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+      "sub": userID,
+      "exp": time.Now().Add(24 * time.Hour).Unix(),
+    })
+    
+    return token.SignedString(s.secret)
+  }
+
+internal/api/auth_handlers.go:
+  package api
+  
+  import (
+    "net/http"
+    "github.com/labstack/echo/v4"
+  )
+  
+  type LoginRequest struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+  }
+  
+  type RegisterRequest struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+    Name     string `json:"name"`
+  }
+  
+  func (s *Server) handleLogin(c echo.Context) error {
+    var req LoginRequest
+    if err := c.Bind(&req); err != nil {
+      return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+    }
+    
+    // TODO: Implement user authentication
+    userID := "user123" // Get from database
+    
+    token, err := s.auth.GenerateToken(userID)
+    if err != nil {
+      return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate token")
+    }
+    
+    return c.JSON(http.StatusOK, map[string]string{"token": token})
+  }
+  
+  func (s *Server) handleRegister(c echo.Context) error {
+    var req RegisterRequest
+    if err := c.Bind(&req); err != nil {
+      return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+    }
+    
+    // TODO: Implement user registration
+    return c.JSON(http.StatusCreated, map[string]string{"status": "registered"})
+  }
+
+Route Registration:
+-----------------
+Add to internal/api/routes.go:
+  // Public routes
+  s.echo.POST("/auth/login", s.handleLogin)
+  s.echo.POST("/auth/register", s.handleRegister)
+  
+  // Protected routes
+  protected := s.echo.Group("/api")
+  protected.Use(s.auth.Middleware())
+
+Environment Variables:
+--------------------
+Add to .env:
+  JWT_SECRET=your-secret-key-change-me-in-production
+
+Config Updates:
+-------------
+Add to internal/config/config.go Config struct:
+  JWTSecret string
+
+Add to Load() function:
+  JWTSecret: getEnv("JWT_SECRET", "your-secret-key"), 

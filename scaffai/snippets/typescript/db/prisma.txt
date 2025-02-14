@@ -1,0 +1,131 @@
+Name: Prisma with PostgreSQL
+Description: Prisma ORM setup with PostgreSQL and TypeScript
+Dependencies: @prisma/client
+
+Files:
+------
+prisma/schema.prisma:
+  generator client {
+    provider = "prisma-client-js"
+  }
+  
+  datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+  }
+  
+  model User {
+    id        String   @id @default(uuid())
+    email     String   @unique
+    name      String
+    password  String
+    createdAt DateTime @default(now()) @map("created_at")
+    updatedAt DateTime @updatedAt @map("updated_at")
+  
+    @@map("users")
+  }
+
+src/lib/prisma.ts:
+  import { PrismaClient } from '@prisma/client'
+  
+  declare global {
+    var prisma: PrismaClient | undefined
+  }
+  
+  export const prisma = global.prisma || new PrismaClient()
+  
+  if (process.env.NODE_ENV !== 'production') {
+    global.prisma = prisma
+  }
+
+src/repositories/base.ts:
+  import { PrismaClient } from '@prisma/client'
+  import { prisma } from '../lib/prisma'
+  
+  export class Repository<T> {
+    constructor(
+      protected readonly prisma: PrismaClient = prisma,
+      protected readonly model: any
+    ) {}
+  
+    async findById(id: string): Promise<T | null> {
+      return this.prisma[this.model].findUnique({
+        where: { id }
+      })
+    }
+  
+    async create(data: Omit<T, 'id' | 'createdAt' | 'updatedAt'>): Promise<T> {
+      return this.prisma[this.model].create({
+        data
+      })
+    }
+  
+    async update(id: string, data: Partial<T>): Promise<T> {
+      return this.prisma[this.model].update({
+        where: { id },
+        data
+      })
+    }
+  
+    async delete(id: string): Promise<T> {
+      return this.prisma[this.model].delete({
+        where: { id }
+      })
+    }
+  }
+
+src/repositories/users.ts:
+  import { User } from '@prisma/client'
+  import { Repository } from './base'
+  
+  export class UserRepository extends Repository<User> {
+    constructor() {
+      super(undefined, 'user')
+    }
+  
+    async findByEmail(email: string): Promise<User | null> {
+      return this.prisma.user.findUnique({
+        where: { email }
+      })
+    }
+  }
+
+Environment Variables:
+--------------------
+Add to .env:
+  DATABASE_URL="postgresql://postgres:postgres@localhost:5432/dbname?schema=public"
+
+Usage Example:
+------------
+Add to src/api/users.ts:
+  import { UserRepository } from '../repositories/users'
+  
+  const userRepo = new UserRepository()
+  
+  export async function getUser(id: string) {
+    const user = await userRepo.findById(id)
+    if (!user) {
+      throw new Error('User not found')
+    }
+    return user
+  }
+  
+  export async function createUser(data: {
+    email: string
+    name: string
+    password: string
+  }) {
+    return userRepo.create(data)
+  }
+
+Migrations:
+----------
+Run these commands:
+1. Initialize Prisma:
+   npx prisma generate
+
+2. Create migration:
+   npx prisma migrate dev --name init
+
+3. Apply migrations:
+   npx prisma migrate deploy 

@@ -1,0 +1,236 @@
+Project Template: Modern Go Application
+Description: Go project template with configurable database, logging, and authentication
+Version: 1.0.0
+
+Dependencies:
+------------
+Core:
+- github.com/labstack/echo/v4
+- github.com/joho/godotenv
+
+Optional:
+  Database:
+  - github.com/jackc/pgx/v5
+  - github.com/jmoiron/sqlx
+  - github.com/pocketbase/pocketbase
+  
+  Logging:
+  - github.com/rs/zerolog
+  
+  Testing:
+  - github.com/stretchr/testify
+
+Directory Structure:
+-------------------
+cmd/
+  ${project_name}/
+    main.go:
+      package main
+      
+      import (
+        "context"
+        "log"
+        "os"
+        
+        "github.com/${username}/${project_name}/internal/api"
+        "github.com/${username}/${project_name}/internal/config"
+        "github.com/${username}/${project_name}/internal/db"
+      )
+      
+      func main() {
+        cfg, err := config.Load()
+        if err != nil {
+          log.Fatal(err)
+        }
+        
+        db, err := db.Connect(context.Background(), cfg.DatabaseURL)
+        if err != nil {
+          log.Fatal(err)
+        }
+        defer db.Close()
+        
+        server := api.NewServer(cfg, db)
+        server.Start()
+      }
+
+internal/
+  api/
+    server.go:
+      package api
+      
+      import (
+        "github.com/labstack/echo/v4"
+        "github.com/labstack/echo/v4/middleware"
+        "github.com/${username}/${project_name}/internal/config"
+        "github.com/${username}/${project_name}/internal/db"
+      )
+      
+      type Server struct {
+        echo *echo.Echo
+        cfg  *config.Config
+        db   *db.DB
+      }
+      
+      func NewServer(cfg *config.Config, db *db.DB) *Server {
+        e := echo.New()
+        
+        // Middleware
+        e.Use(middleware.Logger())
+        e.Use(middleware.Recover())
+        e.Use(middleware.CORS())
+        
+        s := &Server{
+          echo: e,
+          cfg:  cfg,
+          db:   db,
+        }
+        
+        s.registerRoutes()
+        return s
+      }
+      
+      func (s *Server) Start() error {
+        return s.echo.Start(s.cfg.ListenAddr)
+      }
+    
+    routes.go:
+      package api
+      
+      func (s *Server) registerRoutes() {
+        // Public routes
+        s.echo.GET("/health", s.handleHealth)
+        
+        // Protected routes
+        protected := s.echo.Group("/api")
+        // Add your protected routes here
+      }
+    
+    handlers.go:
+      package api
+      
+      import (
+        "net/http"
+        "github.com/labstack/echo/v4"
+      )
+      
+      func (s *Server) handleHealth(c echo.Context) error {
+        return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
+      }
+
+  config/
+    config.go:
+      package config
+      
+      import "github.com/joho/godotenv"
+      
+      type Config struct {
+        ListenAddr   string
+        DatabaseURL  string
+      }
+      
+      func Load() (*Config, error) {
+        godotenv.Load()
+        
+        return &Config{
+          ListenAddr:  getEnv("LISTEN_ADDR", ":8080"),
+          DatabaseURL: getEnv("DATABASE_URL", ""),
+        }, nil
+      }
+      
+      func getEnv(key, fallback string) string {
+        if value, exists := os.LookupEnv(key); exists {
+          return value
+        }
+        return fallback
+      }
+
+GitHub Workflow (test.yml):
+--------------------------
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: |
+          go test -v ./...
+          go vet ./...
+          go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+Additional Files:
+---------------
+.env:
+  LISTEN_ADDR=:8080
+  DATABASE_URL=postgres://postgres:postgres@localhost:5432/dbname?sslmode=disable
+
+README.md:
+  # ${project_name}
+  
+  ${description}
+  
+  ## Setup
+  
+  1. Copy `.env.example` to `.env` and adjust values
+  2. Run database (if using)
+  3. Run the application:
+  ```bash
+  go run cmd/${project_name}/main.go
+  ```
+  
+  ## Development
+  
+  ```bash
+  # Run tests
+  go test ./...
+  
+  # Run linter
+  go vet ./...
+  staticcheck ./...
+  ```
+
+.gitignore:
+  # Binaries
+  *.exe
+  *.exe~
+  *.dll
+  *.so
+  *.dylib
+  
+  # Test binary
+  *.test
+  
+  # Output
+  *.out
+  
+  # Environment
+  .env
+  
+  # IDE
+  .idea/
+  .vscode/
+  *.swp
+  *.swo
+  
+  # Dependency directories
+  vendor/
+  
+  # Go workspace file
+  go.work 

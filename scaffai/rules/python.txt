@@ -1,0 +1,214 @@
+Project Template: Modern Python Application
+Description: Modern Python project with FastAPI/Typer, testing, and best practices
+Version: 1.0.0
+
+Dependencies:
+------------
+Core:
+- fastapi
+- typer
+- pydantic
+- rich
+- python-dotenv
+
+Optional:
+  Database:
+  - sqlalchemy
+  - asyncpg
+  - motor
+  - beanie
+  
+  Testing:
+  - pytest
+  - pytest-asyncio
+  - pytest-cov
+  
+  Development:
+  - ruff
+  - mypy
+  - black
+
+Directory Structure:
+-------------------
+src/${project_name}/
+  __init__.py:
+    """${description}"""
+    __version__ = "${version}"
+
+  core/
+    __init__.py: ""
+    config.py:
+      from pydantic_settings import BaseSettings, SettingsConfigDict
+      from functools import lru_cache
+      
+      class Settings(BaseSettings):
+          model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+          
+          APP_NAME: str = "${project_name}"
+          DEBUG: bool = False
+          
+          # Add your settings here
+          
+      @lru_cache
+      def get_settings() -> Settings:
+          return Settings()
+
+    logging.py:
+      import logging
+      import sys
+      from rich.logging import RichHandler
+      
+      def setup_logging():
+          logging.basicConfig(
+              level=logging.INFO,
+              format="%(message)s",
+              datefmt="[%X]",
+              handlers=[RichHandler(rich_tracebacks=True)]
+          )
+
+  api/
+    __init__.py: ""
+    router.py:
+      from fastapi import APIRouter
+      
+      router = APIRouter()
+      
+      @router.get("/health")
+      async def health_check():
+          return {"status": "ok"}
+
+  cli/
+    __init__.py: ""
+    main.py:
+      import typer
+      from rich.console import Console
+      from rich.panel import Panel
+      
+      app = typer.Typer(help="${description}")
+      console = Console()
+      
+      @app.command()
+      def hello(name: str):
+          """Say hello to someone"""
+          console.print(Panel.fit(f"Hello {name}! 👋"))
+      
+      def main():
+          app()
+      
+      if __name__ == "__main__":
+          main()
+
+tests/
+  __init__.py: ""
+  conftest.py:
+    import pytest
+    from fastapi.testclient import TestClient
+    
+    @pytest.fixture
+    def client():
+        from ${project_name}.api import router
+        from fastapi import FastAPI
+        
+        app = FastAPI()
+        app.include_router(router)
+        
+        return TestClient(app)
+
+  test_api.py:
+    def test_health_check(client):
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
+GitHub Workflow (test.yml):
+--------------------------
+name: Test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install uv
+          uv venv
+          uv pip install -e ".[dev]"
+          pytest --cov
+          ruff check .
+          mypy .
+
+Additional Files:
+---------------
+README.md:
+  # ${project_name}
+  
+  ${description}
+  
+  ## Installation
+  
+  ```bash
+  uv venv
+  uv pip install -e ".[dev]"
+  ```
+  
+  ## Usage
+  
+  ### API
+  ```bash
+  uvicorn ${project_name}.api:app --reload
+  ```
+  
+  ### CLI
+  ```bash
+  python -m ${project_name}.cli.main hello world
+  ```
+  
+  ## Development
+  
+  ```bash
+  # Run tests
+  pytest
+  
+  # Run linter
+  ruff check .
+  
+  # Run type checker
+  mypy .
+  ```
+
+.env:
+  APP_NAME=${project_name}
+  DEBUG=true
+
+.gitignore:
+  __pycache__/
+  *.py[cod]
+  *$py.class
+  *.so
+  .Python
+  build/
+  develop-eggs/
+  dist/
+  downloads/
+  eggs/
+  .eggs/
+  lib/
+  lib64/
+  parts/
+  sdist/
+  var/
+  wheels/
+  *.egg-info/
+  .installed.cfg
+  *.egg
+  .env
+  .venv
+  venv/
+  .pytest_cache/
+  .coverage
+  htmlcov/
+  .ruff_cache/
+  .mypy_cache/ 
